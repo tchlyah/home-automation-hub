@@ -1,0 +1,122 @@
+blueprint:
+  name: Humidity & Temp Cool-to-Dry Climate Control
+  description: >
+    Triggers a cool-to-dry cycle based on humidity/temperature thresholds.
+  domain: automation
+  input:
+    climate_entity:
+      name: Climate Entity
+      description: The climate entity to control and read temperature/humidity from
+      selector:
+        entity:
+          domain: climate
+    temperature_threshold:
+      name: Temperature Threshold
+      description: Temperature above which to activate climate
+      default: 28
+      selector:
+        number:
+          min: 20
+          max: 35
+          unit_of_measurement: "°C"
+    humidity_threshold:
+      name: Humidity Threshold
+      description: Humidity above which to activate climate
+      default: 65
+      selector:
+        number:
+          min: 30
+          max: 100
+          unit_of_measurement: "%"
+    run_duration:
+      name: Run Duration (minutes)
+      description: How long the AC should run once triggered
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: "minutes"
+    target_temperature:
+      name: Target Temperature
+      description: Target temperature to set when AC is turned on
+      default: 24
+      selector:
+        number:
+          min: 16
+          max: 30
+          unit_of_measurement: "°C"
+    fan_mode:
+      name: Fan Mode
+      description: Fan mode to set when AC is turned on
+      default: auto
+      selector:
+        select:
+          options:
+            - auto
+            - low
+            - medium
+            - high
+
+trigger:
+  - platform: state
+    entity_id: !input climate_entity
+
+condition:
+  - condition: state
+    entity_id: !input climate_entity
+    state: "off"
+  - condition: or
+    conditions:
+      - condition: numeric_state
+        entity_id: !input climate_entity
+        attribute: current_humidity
+        above: !input humidity_threshold
+      - condition: numeric_state
+        entity_id: !input climate_entity
+        attribute: current_temperature
+        above: !input temperature_threshold
+
+action:
+  - variables:
+      climate_entity: !input climate_entity
+      previous_temp: "{{ state_attr(climate_entity, 'temperature') }}"
+      previous_fan: "{{ state_attr(climate_entity, 'fan_mode') }}"
+  - service: climate.set_temperature
+    data:
+      temperature: !input target_temperature
+    target:
+      entity_id: !input climate_entity
+  - service: climate.set_fan_mode
+    data:
+      fan_mode: !input fan_mode
+    target:
+      entity_id: !input climate_entity
+  - service: climate.turn_on
+    target:
+      entity_id: !input climate_entity
+  - delay:
+      minutes: !input run_duration
+  - service: climate.turn_off
+    target:
+      entity_id: !input climate_entity
+  - service: climate.set_temperature
+    data:
+      temperature: "{{ previous_temp }}"
+    target:
+      entity_id: !input climate_entity
+  - service: climate.set_fan_mode
+    data:
+      fan_mode: "{{ previous_fan }}"
+    target:
+      entity_id: !input climate_entity
+  - choose:
+      - conditions:
+          - condition: numeric_state
+            entity_id: !input climate_entity
+            attribute: humidity
+            above: 60
+        sequence:
+          - service: notify.notify
+            data:
+              message: "Humidity is still high after AC cycle."
