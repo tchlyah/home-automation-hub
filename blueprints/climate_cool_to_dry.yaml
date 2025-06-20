@@ -33,14 +33,14 @@ blueprint:
           unit_of_measurement: "%"
 
     run_duration:
-      name: Run Duration (minutes)
+      name: Run Duration
       description: How long to keep this dry cycle once triggered
-      default: 30
+      default:
+        hours: 0
+        minutes: 30
+        seconds: 0
       selector:
-        number:
-          min: 1
-          max: 180
-          unit_of_measurement: "minutes"
+        duration:
 
     target_temperature:
       name: Target Temperature (°C)
@@ -65,14 +65,14 @@ blueprint:
             - high
 
     dry_cycle_interval:
-      name: Cool-to-Dry Cycle Minimum Interval (minutes)
+      name: Cool-to-Dry Cycle Minimum Interval
       description: Minimum time to wait after the last dry cycle before running another
-      default: 120
+      default:
+        hours: 2
+        minutes: 0
+        seconds: 0
       selector:
-        number:
-          min: 1
-          max: 1440
-          unit_of_measurement: "minutes"
+        duration:
 
 mode: single
 
@@ -91,7 +91,7 @@ condition:
       {% if last is none %}
         true
       {% else %}
-        {{ ((as_timestamp(now()) - as_timestamp(last)) / 60) > dry_cycle_interval }}
+        {{ (now() - last) > timedelta(**dry_cycle_interval) }}
       {% endif %}
 
   # 2) Either humidity or temperature above threshold
@@ -132,8 +132,7 @@ action:
       entity_id: !input climate_entity
 
   # 2) Let it run
-  - delay:
-      minutes: !input run_duration
+  - delay: !input run_duration
 
   # 3) Restore original settings
   - choose:
