@@ -45,7 +45,7 @@ blueprint:
     target_temperature:
       name: Target Temperature (°C)
       description: Target temperature to set during this dry cycle
-      default: 24
+      default: 23
       selector:
         number:
           min: 16
@@ -53,7 +53,7 @@ blueprint:
           unit_of_measurement: "°C"
 
     fan_mode:
-      name: Fan Mode
+      name: Target Fan Mode
       description: Fan mode to set during this dry cycle
       default: auto
       selector:
@@ -63,6 +63,18 @@ blueprint:
             - low
             - medium
             - high
+
+    hvac_mode:
+      name: Target HVAC Mode (Optional)
+      description: Optional HVAC mode to set during this dry cycle. Set to none to skip.
+      default: "none"
+      selector:
+        select:
+          options:
+            - cool
+            - dry
+            - fan_only
+            - none
 
     dry_cycle_interval:
       name: Cool-to-Dry Cycle Minimum Interval
@@ -113,6 +125,8 @@ action:
       climate_entity: !input climate_entity
       previous_temp: "{{ state_attr(climate_entity, 'temperature') }}"
       previous_fan: "{{ state_attr(climate_entity, 'fan_mode') }}"
+      previous_mode: "{{ states(climate_entity) }}"
+      hvac_mode: !input hvac_mode
       ac_was_off: "{{ is_state(climate_entity, 'off') }}"
 
   - service: climate.set_temperature
@@ -127,14 +141,37 @@ action:
     data:
       fan_mode: !input fan_mode
 
-  - service: climate.turn_on
-    target:
-      entity_id: !input climate_entity
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ hvac_mode != 'none' }}"
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: "{{ hvac_mode }}"
+    default:
+      - service: climate.turn_on
+        target:
+          entity_id: !input climate_entity
 
   # 2) Let it run
   - delay: !input run_duration
 
   # 3) Restore original settings
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ hvac_mode != 'none' }}"
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: "{{ previous_mode }}"
+
   - choose:
       - conditions:
           - condition: template
@@ -162,7 +199,7 @@ action:
           - condition: numeric_state
             entity_id: !input climate_entity
             attribute: humidity
-            above: 60
+            above: !input humidity_threshold
         sequence:
           - service: notify.notify
             data:
