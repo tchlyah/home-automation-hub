@@ -1,7 +1,7 @@
 blueprint:
   name: Humidity & Temp Cool-to-Dry Climate Control
   description: >
-    Triggers a cool-to-dry cycle based on humidity/temperature thresholds, but only if the AC was off and at least your configured interval has elapsed since the last cool-to-dry cycle. Restores the previous state after the run duration.
+    Triggers a cool-to-dry cycle based on humidity/temperature thresholds, but only if at least your configured interval has elapsed since the last cool-to-dry cycle. Restores the previous state after the run duration.
   domain: automation
 
   input:
@@ -94,12 +94,7 @@ condition:
         {{ ((as_timestamp(now()) - as_timestamp(last)) / 60) > dry_cycle_interval }}
       {% endif %}
 
-  # 2) AC must currently be off
-  - condition: state
-    entity_id: !input climate_entity
-    state: "off"
-
-  # 3) Either humidity or temperature above threshold
+  # 2) Either humidity or temperature above threshold
   - condition: or
     conditions:
       - condition: numeric_state
@@ -118,6 +113,7 @@ action:
       climate_entity: !input climate_entity
       previous_temp: "{{ state_attr(climate_entity, 'temperature') }}"
       previous_fan: "{{ state_attr(climate_entity, 'fan_mode') }}"
+      ac_was_off: "{{ is_state(climate_entity, 'off') }}"
 
   - service: climate.set_temperature
     target:
@@ -140,9 +136,14 @@ action:
       minutes: !input run_duration
 
   # 3) Restore original settings
-  - service: climate.turn_off
-    target:
-      entity_id: !input climate_entity
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ ac_was_off }}"
+        sequence:
+          - service: climate.turn_off
+            target:
+              entity_id: !input climate_entity
 
   - service: climate.set_temperature
     target:
