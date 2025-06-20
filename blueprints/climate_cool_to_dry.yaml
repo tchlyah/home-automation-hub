@@ -1,8 +1,9 @@
 blueprint:
   name: Humidity & Temp Cool-to-Dry Climate Control
   description: >
-    Triggers a cool-to-dry cycle based on humidity/temperature thresholds.
+    Triggers a cool-to-dry cycle based on humidity/temperature thresholds, but only if the AC was off and at least your configured interval has elapsed since the last cool-to-dry cycle. Restores the previous state after the run duration.
   domain: automation
+
   input:
     climate_entity:
       name: Climate Entity
@@ -10,45 +11,50 @@ blueprint:
       selector:
         entity:
           domain: climate
+
     temperature_threshold:
-      name: Temperature Threshold
-      description: Temperature above which to activate climate
+      name: Temperature Threshold (°C)
+      description: Temperature above which to activate automation
       default: 28
       selector:
         number:
           min: 20
           max: 35
           unit_of_measurement: "°C"
+
     humidity_threshold:
-      name: Humidity Threshold
-      description: Humidity above which to activate climate
+      name: Humidity Threshold (%)
+      description: Humidity above which to activate automation
       default: 65
       selector:
         number:
           min: 30
           max: 100
           unit_of_measurement: "%"
+
     run_duration:
       name: Run Duration (minutes)
-      description: How long the AC should run once triggered
+      description: How long to keep this dry cycle once triggered
       default: 30
       selector:
         number:
           min: 1
           max: 180
           unit_of_measurement: "minutes"
+
     target_temperature:
-      name: Target Temperature
-      description: Target temperature to set when AC is turned on
+      name: Target Temperature (°C)
+      description: Target temperature to set during this dry cycle
       default: 24
       selector:
         number:
           min: 16
           max: 30
           unit_of_measurement: "°C"
+
     fan_mode:
       name: Fan Mode
-      description: Fan mode to set when AC is turned on
+      description: Fan mode to set during this dry cycle
       default: auto
       selector:
         select:
@@ -58,14 +64,42 @@ blueprint:
             - medium
             - high
 
+    dry_cycle_interval:
+      name: Cool-to-Dry Cycle Minimum Interval (minutes)
+      description: Minimum time to wait after the last dry cycle before running another
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: "minutes"
+
+mode: single
+
 trigger:
   - platform: state
     entity_id: !input climate_entity
 
+variables:
+  dry_cycle_interval: !input dry_cycle_interval
+
 condition:
+  # 1) Only proceed if at least dry_cycle_interval minutes have passed since last_run_datetime
+  - condition: template
+    value_template: >
+      {% set last = this.attributes.last_triggered %}
+      {% if last is none %}
+        true
+      {% else %}
+        {{ ((as_timestamp(now()) - as_timestamp(last)) / 60) > dry_cycle_interval }}
+      {% endif %}
+
+  # 2) AC must currently be off
   - condition: state
     entity_id: !input climate_entity
     state: "off"
+
+  # 3) Either humidity or temperature above threshold
   - condition: or
     conditions:
       - condition: numeric_state
@@ -78,38 +112,51 @@ condition:
         above: !input temperature_threshold
 
 action:
+
+  # 1) Save previous state for restoration
   - variables:
       climate_entity: !input climate_entity
       previous_temp: "{{ state_attr(climate_entity, 'temperature') }}"
       previous_fan: "{{ state_attr(climate_entity, 'fan_mode') }}"
+
   - service: climate.set_temperature
+    target:
+      entity_id: !input climate_entity
     data:
       temperature: !input target_temperature
+
+  - service: climate.set_fan_mode
     target:
       entity_id: !input climate_entity
-  - service: climate.set_fan_mode
     data:
       fan_mode: !input fan_mode
-    target:
-      entity_id: !input climate_entity
+
   - service: climate.turn_on
     target:
       entity_id: !input climate_entity
+
+  # 2) Let it run
   - delay:
       minutes: !input run_duration
+
+  # 3) Restore original settings
   - service: climate.turn_off
     target:
       entity_id: !input climate_entity
+
   - service: climate.set_temperature
+    target:
+      entity_id: !input climate_entity
     data:
       temperature: "{{ previous_temp }}"
+
+  - service: climate.set_fan_mode
     target:
       entity_id: !input climate_entity
-  - service: climate.set_fan_mode
     data:
       fan_mode: "{{ previous_fan }}"
-    target:
-      entity_id: !input climate_entity
+
+  # 4) Optional notify if humidity still high
   - choose:
       - conditions:
           - condition: numeric_state
@@ -119,4 +166,4 @@ action:
         sequence:
           - service: notify.notify
             data:
-              message: "Humidity is still high after AC cycle."
+              message: "Humidity is still high after Cool To Dry cycle."
