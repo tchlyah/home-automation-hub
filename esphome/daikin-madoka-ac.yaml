@@ -1,0 +1,65 @@
+substitutions:
+  name: madoka-living
+  friendly_name: Living
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: github://Petapton/esphome@madoka
+    components: [ madoka ]
+
+# Bluetooth Configuration
+esp32_ble_tracker:
+esp32_ble:
+  io_capability: display_yes_no
+
+# Bluetooth client to talk to Madoka
+ble_client:
+  - mac_address: B8:F2:55:00:92:42
+    id: madoka_living
+
+# The madoka climate platform
+climate:
+  - platform: madoka
+    name: AC
+    id: ac
+    ble_client_id: madoka_living
+    update_interval: 15s
+
+# Enable Web server
+web_server:
+  port: 80
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+# Allow Over-The-Air updates
+ota:
+  - platform: esphome
+    password: !secret ota_pwd
+
+wifi:
+  # use_address: 192.168.1.135
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret ota_pwd
+
+# In combination with the `ap` this allows the user
+# to provision wifi credentials to the device via WiFi AP.
+captive_portal:
