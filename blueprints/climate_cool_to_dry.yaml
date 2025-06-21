@@ -12,6 +12,26 @@ blueprint:
         entity:
           domain: climate
 
+    temperature_sensors:
+      name: Additional Temperature Sensors (Optional)
+      description: Optional list of extra temperature sensors
+      default: [ ]
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+          multiple: true
+
+    humidity_sensors:
+      name: Additional Humidity Sensors (Optional)
+      description: Optional list of extra humidity sensors
+      default: [ ]
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+          multiple: true
+
     temperature_threshold:
       name: Temperature Threshold (°C)
       description: Temperature above which to activate automation
@@ -91,9 +111,17 @@ mode: single
 trigger:
   - platform: state
     entity_id: !input climate_entity
+  - platform: state
+    entity_id: !input temperature_sensors
+  - platform: state
+    entity_id: !input humidity_sensors
 
 variables:
   dry_cycle_interval: !input dry_cycle_interval
+  temperature_threshold: !input temperature_threshold
+  temperature_sensors: !input temperature_sensors
+  humidity_sensors: !input humidity_sensors
+  humidity_threshold: !input humidity_threshold
 
 condition:
   # 1) Only proceed if at least dry_cycle_interval minutes have passed since last_run_datetime
@@ -117,7 +145,22 @@ condition:
         entity_id: !input climate_entity
         attribute: current_temperature
         above: !input temperature_threshold
-
+      - condition: template
+        value_template: >-
+          {{ expand(temperature_sensors)
+              | map(attribute='state') 
+              | map('float') 
+              | select('gt', temperature_threshold) 
+              | list 
+              | count > 0 }}
+      - condition: template
+        value_template: >-
+          {{ expand(humidity_sensors)
+              | map(attribute='state') 
+              | map('float') 
+              | select('gt', humidity_threshold) 
+              | list 
+              | count > 0 }}
 action:
 
   # 1) Save previous state for restoration
