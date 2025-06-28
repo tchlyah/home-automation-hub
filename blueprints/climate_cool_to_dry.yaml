@@ -1,111 +1,137 @@
 blueprint:
   name: Humidity & Temp Cool-to-Dry Climate Control
   description: >
-    Triggers a cool-to-dry cycle based on humidity/temperature thresholds, but only if at least your configured interval has elapsed since the last cool-to-dry cycle. Restores the previous state after the run duration.
+    # ❄️Humidity & Temp Cool-to-Dry
+
+    Automatically triggers a cool-to-dry cycle if humidity or temperature exceed thresholds.  
+    The cycle adjusts HVAC settings and restores previous values when done.  
+    You can customize temperature, fan, and HVAC mode for the cycle, as well as restrict how frequently it can repeat.
+
+    **\* Required parameters.**
   domain: automation
 
   input:
-    climate_entity:
-      name: Climate Entity
-      description: The climate entity to control and read temperature/humidity from
-      selector:
-        entity:
-          domain: climate
+    climate:
+      name: Climate *
+      icon: mdi:thermostat
+      collapsed: false
+      input:
+        climate_entity:
+          name: Climate Entity
+          description: The climate entity to control and read temperature/humidity from
+          selector:
+            entity:
+              domain: climate
 
-    temperature_sensors:
-      name: Additional Temperature Sensors (Optional)
-      description: Optional list of extra temperature sensors
-      default: [ ]
-      selector:
-        entity:
-          domain: sensor
-          device_class: temperature
-          multiple: true
+    sensors:
+      name: Sensors
+      icon: mdi:eye
+      collapsed: true
+      input:
+        temperature_sensors:
+          name: Additional Temperature Sensors
+          description: Optional list of extra temperature sensors
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+              multiple: true
+        humidity_sensors:
+          name: Additional Humidity Sensors
+          description: Optional list of extra humidity sensors
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              device_class: humidity
+              multiple: true
 
-    humidity_sensors:
-      name: Additional Humidity Sensors (Optional)
-      description: Optional list of extra humidity sensors
-      default: [ ]
-      selector:
-        entity:
-          domain: sensor
-          device_class: humidity
-          multiple: true
+    thresholds:
+      name: Thresholds *
+      icon: mdi:chart-line
+      collapsed: true
+      input:
+        temperature_threshold:
+          name: Temperature Threshold (°C)
+          description: Temperature above which to activate automation
+          default: 28
+          selector:
+            number:
+              min: 20
+              max: 35
+              unit_of_measurement: "°C"
+        humidity_threshold:
+          name: Humidity Threshold (%)
+          description: Humidity above which to activate automation
+          default: 65
+          selector:
+            number:
+              min: 30
+              max: 100
+              unit_of_measurement: "%"
 
-    temperature_threshold:
-      name: Temperature Threshold (°C)
-      description: Temperature above which to activate automation
-      default: 28
-      selector:
-        number:
-          min: 20
-          max: 35
-          unit_of_measurement: "°C"
+    targets:
+      name: Targets *
+      icon: mdi:target
+      collapsed: true
+      input:
+        target_temperature:
+          name: Target Temperature (°C) *
+          description: Target temperature to set during this dry cycle
+          default: 23
+          selector:
+            number:
+              min: 16
+              max: 30
+              unit_of_measurement: "°C"
+        fan_mode:
+          name: Target Fan Mode
+          description: Fan mode to set during this dry cycle. Set to none to skip.
+          default: none
+          selector:
+            select:
+              options:
+                - auto
+                - low
+                - medium
+                - high
+                - none
+        hvac_mode:
+          name: Target HVAC Mode
+          description: Optional HVAC mode to set during this dry cycle. Set to none to skip.
+          default: "none"
+          selector:
+            select:
+              options:
+                - cool
+                - dry
+                - fan_only
+                - none
 
-    humidity_threshold:
-      name: Humidity Threshold (%)
-      description: Humidity above which to activate automation
-      default: 65
-      selector:
-        number:
-          min: 30
-          max: 100
-          unit_of_measurement: "%"
-
-    run_duration:
-      name: Run Duration
-      description: How long to keep this dry cycle once triggered
-      default:
-        hours: 0
-        minutes: 30
-        seconds: 0
-      selector:
-        duration:
-
-    target_temperature:
-      name: Target Temperature (°C)
-      description: Target temperature to set during this dry cycle
-      default: 23
-      selector:
-        number:
-          min: 16
-          max: 30
-          unit_of_measurement: "°C"
-
-    fan_mode:
-      name: Target Fan Mode (Optional)
-      description: Fan mode to set during this dry cycle. Set to none to skip.
-      default: none
-      selector:
-        select:
-          options:
-            - auto
-            - low
-            - medium
-            - high
-            - none
-
-    hvac_mode:
-      name: Target HVAC Mode (Optional)
-      description: Optional HVAC mode to set during this dry cycle. Set to none to skip.
-      default: "none"
-      selector:
-        select:
-          options:
-            - cool
-            - dry
-            - fan_only
-            - none
-
-    dry_cycle_interval:
-      name: Cool-to-Dry Cycle Minimum Interval
-      description: Minimum time to wait after the last dry cycle before running another
-      default:
-        hours: 2
-        minutes: 0
-        seconds: 0
-      selector:
-        duration:
+    cycle_timing:
+      name: Cycle Timing *
+      icon: mdi:timer-sand
+      collapsed: true
+      input:
+        run_duration:
+          name: Run Duration
+          description: How long to keep this dry cycle once triggered
+          default:
+            hours: 0
+            minutes: 30
+            seconds: 0
+          selector:
+            duration:
+        dry_cycle_interval:
+          name: Cool-to-Dry Cycle Minimum Interval
+          description: Minimum time to wait after the last dry cycle before running another
+          default:
+            hours: 2
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
 
 mode: single
 
@@ -149,19 +175,20 @@ condition:
       - condition: template
         value_template: >-
           {{ expand(temperature_sensors)
-              | map(attribute='state') 
-              | map('float') 
-              | select('gt', temperature_threshold) 
-              | list 
+              | map(attribute='state')
+              | map('float')
+              | select('gt', temperature_threshold)
+              | list
               | count > 0 }}
       - condition: template
         value_template: >-
           {{ expand(humidity_sensors)
-              | map(attribute='state') 
-              | map('float') 
-              | select('gt', humidity_threshold) 
-              | list 
+              | map(attribute='state')
+              | map('float')
+              | select('gt', humidity_threshold)
+              | list
               | count > 0 }}
+
 action:
 
   # 1) Save previous state for restoration
@@ -252,7 +279,7 @@ action:
       - conditions:
           - condition: numeric_state
             entity_id: !input climate_entity
-            attribute: humidity
+            attribute: current_humidity
             above: !input humidity_threshold
         sequence:
           - service: notify.notify
