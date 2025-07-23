@@ -2,10 +2,24 @@ blueprint:
   name: Humidity & Temp Cool-to-Dry Climate Control
   description: >
     # ❄️Humidity & Temp Cool-to-Dry
+    
+    **Version: 1.1**
 
     Automatically triggers a cool-to-dry cycle if humidity or temperature exceed thresholds.  
     The cycle adjusts HVAC settings and restores previous values when done.  
     You can customize temperature, fan, and HVAC mode for the cycle, as well as restrict how frequently it can repeat.
+    
+    <details>
+    <summary><b>Version Changelog</b></summary>
+    
+    
+    
+     - **1.0** Initial version  
+     - **1.1** Fixed race condition: prevent restarting AC if already on; start AC/HVAC mode before setting temperature and fan
+
+    </details>
+
+
 
     **\* Required parameters.**
   domain: automation
@@ -201,6 +215,26 @@ action:
       fan_mode: !input fan_mode
       ac_was_off: "{{ is_state(climate_entity, 'off') }}"
 
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ hvac_mode != 'none' }}"
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: "{{ hvac_mode }}"
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_was_off }}"
+            sequence:
+              - service: climate.turn_on
+                target:
+                  entity_id: !input climate_entity
+
   - service: climate.set_temperature
     target:
       entity_id: !input climate_entity
@@ -217,21 +251,6 @@ action:
               entity_id: !input climate_entity
             data:
               fan_mode: "{{ fan_mode }}"
-
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ hvac_mode != 'none' }}"
-        sequence:
-          - service: climate.set_hvac_mode
-            target:
-              entity_id: !input climate_entity
-            data:
-              hvac_mode: "{{ hvac_mode }}"
-    default:
-      - service: climate.turn_on
-        target:
-          entity_id: !input climate_entity
 
   # 2) Let it run
   - delay: !input run_duration
