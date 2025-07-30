@@ -3,7 +3,7 @@ blueprint:
   description: >
     # ❄️Humidity & Temp Cool-to-Dry
     
-    **Version: 1.1**
+    **Version: 1.2**
 
     Automatically triggers a cool-to-dry cycle if humidity or temperature exceed thresholds.  
     The cycle adjusts HVAC settings and restores previous values when done.  
@@ -16,6 +16,7 @@ blueprint:
     
      - **1.0** Initial version  
      - **1.1** Fixed race condition: prevent restarting AC if already on; start AC/HVAC mode before setting temperature and fan
+     - **1.2** Add delays between climate operations to prevent race conditions
 
     </details>
 
@@ -45,7 +46,7 @@ blueprint:
         temperature_sensors:
           name: Additional Temperature Sensors
           description: Optional list of extra temperature sensors
-          default: []
+          default: [ ]
           selector:
             entity:
               domain: sensor
@@ -54,7 +55,7 @@ blueprint:
         humidity_sensors:
           name: Additional Humidity Sensors
           description: Optional list of extra humidity sensors
-          default: []
+          default: [ ]
           selector:
             entity:
               domain: sensor
@@ -129,7 +130,7 @@ blueprint:
       collapsed: true
       input:
         run_duration:
-          name: Run Duration
+          name: Run Duration *
           description: How long to keep this dry cycle once triggered
           default:
             hours: 0
@@ -138,7 +139,7 @@ blueprint:
           selector:
             duration:
         dry_cycle_interval:
-          name: Cool-to-Dry Cycle Minimum Interval
+          name: Cool-to-Dry Cycle Minimum Interval *
           description: Minimum time to wait after the last dry cycle before running another
           default:
             hours: 2
@@ -146,6 +147,15 @@ blueprint:
             seconds: 0
           selector:
             duration:
+        operation_delay:
+          name: Operation Delay (seconds)
+          description: Delay between successive climate operations
+          default: 1
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: "s"
 
 mode: single
 
@@ -163,6 +173,7 @@ variables:
   temperature_sensors: !input temperature_sensors
   humidity_sensors: !input humidity_sensors
   humidity_threshold: !input humidity_threshold
+  operation_delay: !input operation_delay
 
 condition:
   # 1) Only proceed if at least dry_cycle_interval minutes have passed since last_run_datetime
@@ -175,7 +186,7 @@ condition:
         {{ (now() - last) > timedelta(**dry_cycle_interval) }}
       {% endif %}
 
-  # 2) Either humidity or temperature above threshold
+  # 2) Either humidity or temperature above the threshold
   - condition: or
     conditions:
       - condition: numeric_state
@@ -205,7 +216,7 @@ condition:
 
 action:
 
-  # 1) Save previous state for restoration
+  # 1) Save the previous state for restoration
   - variables:
       climate_entity: !input climate_entity
       previous_temp: "{{ state_attr(climate_entity, 'temperature') }}"
@@ -215,6 +226,8 @@ action:
       fan_mode: !input fan_mode
       ac_was_off: "{{ is_state(climate_entity, 'off') }}"
 
+  # 2) Apply the settings
+  # Set the target HVAC mode if needed
   - choose:
       - conditions:
           - condition: template
@@ -225,6 +238,8 @@ action:
               entity_id: !input climate_entity
             data:
               hvac_mode: "{{ hvac_mode }}"
+
+    # Otherwise, put ON if it was OFF
     default:
       - choose:
           - conditions:
@@ -235,27 +250,35 @@ action:
                 target:
                   entity_id: !input climate_entity
 
+  - delay:
+      seconds: !input operation_delay
+
+  # Set the target temperature
   - service: climate.set_temperature
     target:
       entity_id: !input climate_entity
     data:
       temperature: !input target_temperature
 
+  # Set the target FAN mode if needed
   - choose:
       - conditions:
           - condition: template
             value_template: "{{ fan_mode != 'none' }}"
         sequence:
+          - delay:
+              seconds: !input operation_delay
           - service: climate.set_fan_mode
             target:
               entity_id: !input climate_entity
             data:
               fan_mode: "{{ fan_mode }}"
 
-  # 2) Let it run
+  # 3) Let it run
   - delay: !input run_duration
 
-  # 3) Restore original settings
+  # 4) Restore original settings
+  # Restore the HVAC mode if needed
   - choose:
       - conditions:
           - condition: template
@@ -266,32 +289,41 @@ action:
               entity_id: !input climate_entity
             data:
               hvac_mode: "{{ previous_mode }}"
+          - delay:
+              seconds: !input operation_delay
 
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ac_was_off }}"
-        sequence:
-          - service: climate.turn_off
-            target:
-              entity_id: !input climate_entity
-
+  # Restore the temperature
   - service: climate.set_temperature
     target:
       entity_id: !input climate_entity
     data:
       temperature: "{{ previous_temp }}"
 
+  # Restore the FAN if needed
   - choose:
       - conditions:
           - condition: template
             value_template: "{{ fan_mode != 'none' }}"
         sequence:
+          - delay:
+              seconds: !input operation_delay
           - service: climate.set_fan_mode
             target:
               entity_id: !input climate_entity
             data:
               fan_mode: "{{ previous_fan }}"
+
+  # Put back OFF is needed
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ ac_was_off }}"
+        sequence:
+          - delay:
+              seconds: !input operation_delay
+          - service: climate.turn_off
+            target:
+              entity_id: !input climate_entity
 
   # 4) Optional notify if humidity still high
   - choose:
