@@ -1,0 +1,9 @@
+esp8266:
+  board: d1_mini
+
+# UART CN105
+uart:
+  id: HP_UART
+  baud_rate: 2400
+  tx_pin: 1
+  rx_pin: 3
