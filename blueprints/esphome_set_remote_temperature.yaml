@@ -1,0 +1,41 @@
+blueprint:
+  name: Set Remote Temperature on ESPHome Device
+  description: >
+    Calls the ESPHome set_remote_temperature service every 30s using the value
+    from a selected temperature sensor and device name.
+  domain: automation
+  input:
+    temperature_sensor:
+      name: Temperature Sensor
+      description: Sensor entity that provides the temperature value.
+      selector:
+        entity:
+          domain:
+            - sensor
+          device_class:
+            - temperature
+    esphome_device_name:
+      name: ESPHome Device Name
+      description: Enter the name used in the service (e.g., 'master' for esphome.master_set_remote_temperature)
+      selector:
+        text:
+
+trigger:
+  - platform: time_pattern
+    seconds: "/30"
+
+variables:
+  esphome_device_name: !input esphome_device_name
+  temperature_sensor: !input temperature_sensor
+
+condition:
+  - condition: template
+    value_template: >
+      {{ states(temperature_sensor) not in ['unavailable', 'unknown', 'none'] }}
+
+action:
+  - service: "esphome.{{ esphome_device_name }}_set_remote_temperature"
+    data:
+      temperature: "{{ states(temperature_sensor) | float }}"
+
+mode: single

@@ -21,6 +21,7 @@ climate:
     name: AC
     id: ac
     update_interval: 1s
+    remote_temperature_timeout: 30min
     visual:
       min_temperature: 19
       max_temperature: 30
@@ -123,11 +124,25 @@ logger:
     Header: INFO
     Decoder: INFO
     CONTROL_WANTED_SETTINGS: INFO
+    CYCLE: WARN
 
 # Home Assistant
 api:
   encryption:
     key: !secret api_key
+  services:
+    - service: set_remote_temperature
+      variables:
+        temperature: float
+      then:
+        - logger.log:
+            level: INFO
+            format: "Remote temperature received from HA: %.1f C"
+            args: [ "temperature" ]
+        - lambda: "id(ac).set_remote_temperature(temperature);"
+    - service: use_internal_temperature
+      then:
+        - lambda: "id(ac).set_remote_temperature(0);"
 
 # Sync time with Home Assistant
 time:
