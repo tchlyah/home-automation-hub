@@ -1,8 +1,0 @@
-substitutions:
-  name: master
-  friendly_name: Master
-  remote_temp_sensor: sensor.master_climate_temperature
-
-packages:
-  esp: !include mitsubishi-esp32-s3.yaml
-  common: !include mitsubishi-ac-common.yaml

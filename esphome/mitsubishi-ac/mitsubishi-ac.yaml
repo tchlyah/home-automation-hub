@@ -1,0 +1,8 @@
+substitutions:
+  name: guest_room
+  friendly_name: Guest Room
+  remote_temp_sensor: sensor.guest_room_climate_temperature
+
+packages:
+  esp: !include mitsubitshi-d1-mini.yaml
+  common: !include mitsubishi-ac-common.yaml
