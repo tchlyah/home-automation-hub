@@ -1,6 +1,7 @@
 substitutions:
   name: living
   friendly_name: living
+  remote_temp_sensor: living_temperature
 
 esphome:
   name: ${name}
@@ -40,6 +41,22 @@ climate:
     connected:
       name: "Toshiba AC Connected"
     master: 0x04 # Master ID in Toshiba protocol, optional, default is 0x00, for some units needs to be set to 0x01
+    report_sensor_temp:
+      enabled: true
+      sensor: ${remote_temp_sensor} # must match an existing temp sensor id in this yaml file
+      interval: 1min                # default 5min if omitted
+
+sensor:
+  # Remote Temperature Sensor
+  - platform: homeassistant
+    name: "Remote Temperature Sensor"
+    id: ${remote_temp_sensor} # must match the id used in the climate section above if used to report temp to AC
+    entity_id: sensor.${remote_temp_sensor} # Replace with your HomeAssistant remote sensor entity id, or include in substitutions
+    internal: false
+    disabled_by_default: true
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: "°C"
 
 ota:
   - platform: esphome
