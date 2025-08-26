@@ -3,7 +3,6 @@ esp32:
   board: esp32-s3-devkitc-1
   framework:
     type: esp-idf
-    version: latest
 
 ## UART on CN105
 uart:
